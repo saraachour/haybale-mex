@@ -523,10 +523,10 @@ where
             // exactly once, and the order doesn't matter, so we simply process
             // definitions, since each global variable must have exactly one
             // definition. Hence the `filter()` above.
-            if let Type::PointerType { pointee_type, .. } = var.ty.as_ref() {
-                let size_bits = state.size_in_bits(&pointee_type).expect(
-                    "Global variable has a struct type which is opaque in the entire Project",
-                );
+            if let Type::PointerType { .. } = var.ty.as_ref() {
+                let value : &ConstantRef = var.initializer.as_ref().expect("must have initializer.");
+                let value_type: TypeRef = value.get_type(&module.types);
+                let size_bits = state.size_in_bits(value_type.deref()).expect("initializer must be typed and have size");
                 let size_bits = if size_bits == 0 {
                     debug!(
                         "Global {:?} has size 0 bits; allocating 8 bits for it anyway",
@@ -1035,18 +1035,6 @@ where
             Constant::Mul(m) => Ok(self
                 .const_to_bv(&m.operand0)?
                 .mul(&self.const_to_bv(&m.operand1)?)),
-            Constant::UDiv(u) => Ok(self
-                .const_to_bv(&u.operand0)?
-                .udiv(&self.const_to_bv(&u.operand1)?)),
-            Constant::SDiv(s) => Ok(self
-                .const_to_bv(&s.operand0)?
-                .sdiv(&self.const_to_bv(&s.operand1)?)),
-            Constant::URem(u) => Ok(self
-                .const_to_bv(&u.operand0)?
-                .urem(&self.const_to_bv(&u.operand1)?)),
-            Constant::SRem(s) => Ok(self
-                .const_to_bv(&s.operand0)?
-                .srem(&self.const_to_bv(&s.operand1)?)),
             Constant::And(a) => Ok(self
                 .const_to_bv(&a.operand0)?
                 .and(&self.const_to_bv(&a.operand1)?)),
@@ -1107,18 +1095,6 @@ where
                     "Expected InsertElement.index to be a Constant::Int, but got {:?}",
                     index
                 ))),
-            },
-            Constant::ExtractValue(ev) => self.const_to_bv(Self::simplify_const_ev(
-                &ev.aggregate,
-                ev.indices.iter().copied(),
-            )?),
-            Constant::InsertValue(iv) => {
-                let c = Self::simplify_const_iv(
-                    &iv.aggregate,
-                    (*iv.element).clone(),
-                    iv.indices.iter().copied(),
-                )?;
-                self.const_to_bv(&c)
             },
             Constant::GetElementPtr(gep) => {
                 // heavily inspired by `ExecutionManager::symex_gep()` in symex.rs. TODO could try to share more code
@@ -1222,16 +1198,6 @@ where
                     IntPredicate::SLT => bv0.slt(&bv1),
                     IntPredicate::SLE => bv0.slte(&bv1),
                 })
-            },
-            Constant::Select(s) => {
-                let b = self.const_to_bv(&s.condition)?;
-                match b.as_bool() {
-                    None => Err(Error::MalformedInstruction(
-                        "Constant::Select: Expected a constant condition".to_owned(),
-                    )),
-                    Some(true) => self.const_to_bv(&s.true_value),
-                    Some(false) => self.const_to_bv(&s.false_value),
-                }
             },
             _ => unimplemented!("const_to_bv for {:?}", c),
         }
@@ -1626,7 +1592,6 @@ where
     pub fn fp_size_in_bits(fpt: FPType) -> u32 {
         match fpt {
             FPType::Half => 16,
-            #[cfg(feature = "llvm-11-or-greater")]
             FPType::BFloat => 16,
             FPType::Single => 32,
             FPType::Double => 64,
@@ -1646,10 +1611,6 @@ where
         index: usize,
     ) -> Result<(u32, TypeRef)> {
         match base_type {
-            Type::PointerType {
-                pointee_type: element_type,
-                ..
-            }
             | Type::ArrayType { element_type, .. }
             | Type::VectorType { element_type, .. } => {
                 let el_size_bits = self.size_in_bits(element_type).ok_or_else(|| {
@@ -1721,8 +1682,7 @@ where
         solver: V::SolverRef,
     ) -> Result<(V, &'t Type)> {
         match base_type {
-            Type::PointerType { pointee_type: element_type, .. }
-            | Type::ArrayType { element_type, .. }
+            Type::ArrayType { element_type, .. }
             | Type::VectorType { element_type, .. }
             => {
                 let el_size_bits = self.size_in_bits(element_type)
@@ -1737,6 +1697,12 @@ where
             Type::StructType { .. } | Type::NamedStructType { .. } => {
                 Err(Error::MalformedInstruction("Index into struct type must be constant; consider using `get_offset_constant_index` instead of `get_offset_bv_index`".to_owned()))
             },
+
+            Type::PointerType {  .. } 
+            => {
+                    Err(Error::UnsupportedInstruction("Encountered a pointer. All pointers are now opaque".to_owned()))
+
+            }
             _ => panic!("get_offset_bv_index with base type {:?}", base_type),
         }
     }

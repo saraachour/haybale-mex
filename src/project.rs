@@ -369,7 +369,6 @@ impl Project {
     pub fn fp_size_in_bits(fpt: FPType) -> u32 {
         match fpt {
             FPType::Half => 16,
-            #[cfg(feature = "llvm-11-or-greater")]
             FPType::BFloat => 16,
             FPType::Single => 32,
             FPType::Double => 64,
