@@ -28,6 +28,13 @@ env_logger = "0.10"
 
 [features]
 
+[lib]
+name = "haybale"
+path = "src/haybale/lib.rs"
+
+[[bin]]
+name = "mex"           # The name of the target.
+path = "src/mex/main.rs"    # The source file of the target.
 
 [package.metadata.docs.rs]
 # Generate docs.rs documentation with the llvm-10 feature
