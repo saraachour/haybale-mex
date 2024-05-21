@@ -546,7 +546,7 @@ where
             }
         }
         // We also have to allocate (at least a tiny bit of) memory for each
-        // `Function`, just so that we can have pointers to those `Function`s.
+        // `Function`, just so that we can have pointers to those `Functions.
         // We can use `global_allocations.get_func_for_address()` to interpret
         // these function pointers.
         // Similarly, we allocate tiny bits of memory for each function hook,
@@ -560,6 +560,16 @@ where
                 .global_allocations
                 .allocate_function(func, module, addr, addr_bv);
         }
+        info!("Allocating function aliases");
+        for (alias, module) in project.all_global_aliases() {
+            match alias.aliasee {
+                ConstantRef(GlobalReference{name: nm, ty: FuncType{..}}) => {
+                    info!("FUNCTION ALIAS {:#?}\n", alias);
+                },
+                _ => {}
+            }
+        }
+
         debug!("Allocating function hooks");
         for (funcname, hook) in state.config.function_hooks.get_all_hooks() {
             let addr: u64 = state.alloc.alloc(64_u64); // we just allocate 64 bits for each function. No reason to allocate more.

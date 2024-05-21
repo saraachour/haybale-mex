@@ -258,6 +258,7 @@ where
             .enumerate()
             .skip(insts_to_skip)
         {
+            debug!("instr {:?}: {:#?}\n", instnum, inst);
             self.state.cur_loc.instr = BBInstrIndex::Instr(instnum);
             self.state.cur_loc.source_loc = inst.get_debug_loc().as_ref();
             if first_iter {
